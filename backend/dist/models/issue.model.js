@@ -2,12 +2,19 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.IssueModel = exports.LocationModel = void 0;
 const mongoose_1 = require("mongoose");
+const departments_1 = require("../utils/departments");
 const locationSchema = new mongoose_1.Schema({
     latitude: { type: Number, required: true, min: -90, max: 90 },
     longitude: { type: Number, required: true, min: -180, max: 180 },
     address: String,
 }, { _id: false });
 const IssueSchema = new mongoose_1.Schema({
+    customIssueId: {
+        type: String,
+        required: true,
+        unique: true,
+        index: true,
+    },
     citizenId: {
         type: mongoose_1.Schema.Types.ObjectId,
         ref: "Citizen",
@@ -45,6 +52,12 @@ const IssueSchema = new mongoose_1.Schema({
     location: {
         type: locationSchema,
         required: true,
+    },
+    department: {
+        type: String,
+        enum: [...departments_1.VALID_DEPARTMENTS],
+        required: true,
+        message: "Department must be one of: MCD, PWD, Traffic, Water Supply, Electricity",
     },
     media: {
         type: mongoose_1.Schema.Types.ObjectId,

@@ -78,6 +78,7 @@ const citizenSignin = (req, res) => __awaiter(void 0, void 0, void 0, function* 
             res.status(400).json({ message: "Invalid email or password" });
             return;
         }
+        console.log("My JWT Secret is:", process.env.JWT_PASSWORD);
         const token = jsonwebtoken_1.default.sign({
             id: existingCitizen._id,
             role: "citizen",
@@ -97,7 +98,7 @@ const citizenSignin = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     catch (error) {
         console.error("Error during citizen signin:", error);
         res.status(500).json({
-            message: "Internal Server Error",
+            message: "Internal Server Error during signin",
         });
     }
 });

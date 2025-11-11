@@ -10,7 +10,7 @@ export const createIssue = async (
   res: Response
 ): Promise<void> => {
   try {
-    const files = (req.files as Express.Multer.File[]) || [];
+    const files = ((req as any).files as Express.Multer.File[]) || [];
 
     const { title = "Untitled", description, location, issueType, department } = req.body;
     
@@ -140,14 +140,15 @@ export const createIssue = async (
   }
 };
 
-export const getIssues = async (req: Request, res: Response) => {
+export const getIssues = async (req: Request, res: Response): Promise<void> => {
   try {
     // If requester is an admin, filter issues by their department
     let query: Record<string, unknown> = {};
     if ((req as any).role === "admin" && (req as any).adminId) {
       const admin = await AdminModel.findById((req as any).adminId).lean();
       if (!admin) {
-        return res.status(404).json({ message: "Admin not found" });
+        res.status(404).json({ message: "Admin not found" });
+        return;
       }
       if ((admin as any).department) {
         query = { department: (admin as any).department };
@@ -185,7 +186,7 @@ export const getIssues = async (req: Request, res: Response) => {
   }
 };
 
-export const getDepartments = async (req: Request, res: Response) => {
+export const getDepartments = async (req: Request, res: Response): Promise<void> => {
   try {
     const departments = getDepts();
     res.json({ departments });

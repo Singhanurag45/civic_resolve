@@ -9,13 +9,25 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getIssues = exports.createIssue = void 0;
+exports.getDepartments = exports.getIssues = exports.createIssue = void 0;
 const issue_model_1 = require("../models/issue.model");
+const counter_model_1 = require("../models/counter.model");
 const multimedia_model_1 = require("../models/multimedia.model");
+const departments_1 = require("../utils/departments");
+const admin_model_1 = require("../models/admin.model");
 const createIssue = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const files = req.files || [];
-        const { title = "Untitled", description, location, issueType } = req.body;
+        const { title = "Untitled", description, location, issueType, department } = req.body;
+        // Debug logging
+        console.log("Received data:", {
+            title,
+            description: description === null || description === void 0 ? void 0 : description.substring(0, 50),
+            issueType,
+            department,
+            location: typeof location,
+            citizenId: req.citizenId,
+        });
         // location stuff
         let parsedLocation = location;
         if (typeof location === "string") {
@@ -32,8 +44,26 @@ const createIssue = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             !parsedLocation ||
             !parsedLocation.latitude ||
             !parsedLocation.longitude ||
-            !issueType) {
-            res.status(400).json({ message: "Please fill all the required fields " });
+            !issueType ||
+            !department) {
+            res.status(400).json({
+                message: "Please fill all the required fields",
+                missing: {
+                    title: !title,
+                    description: !description,
+                    location: !parsedLocation || !parsedLocation.latitude || !parsedLocation.longitude,
+                    issueType: !issueType,
+                    department: !department,
+                }
+            });
+            return;
+        }
+        // Validate department
+        if (!(0, departments_1.isValidDepartment)(department)) {
+            res.status(400).json({
+                message: "Invalid department. Must be one of: MCD, PWD, Traffic, Water Supply, Electricity",
+                received: department
+            });
             return;
         }
         const existingIssue = yield issue_model_1.IssueModel.findOne({ title });
@@ -43,14 +73,26 @@ const createIssue = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
                 .json({ message: " Issue with this title already exists" });
             return;
         }
+        // Generate human-readable unique ID (RP-YYMMDD-HHMMSS-NNNN)
+        const counter = yield counter_model_1.CounterModel.findOneAndUpdate({ _id: "issueIdCounter" }, { $inc: { seq: 1 } }, { new: true, upsert: true });
+        const now = new Date();
+        const yy = String(now.getFullYear()).slice(-2);
+        const mm = String(now.getMonth() + 1).padStart(2, "0");
+        const dd = String(now.getDate()).padStart(2, "0");
+        const HH = String(now.getHours()).padStart(2, "0");
+        const MM = String(now.getMinutes()).padStart(2, "0");
+        const SS = String(now.getSeconds()).padStart(2, "0");
+        const seqPadded = String(counter.seq).padStart(4, "0");
+        const customIssueId = `RP-${yy}${mm}${dd}-${HH}${MM}${SS}-${seqPadded}`;
         const issue = yield issue_model_1.IssueModel.create({
+            customIssueId,
             citizenId: req.citizenId, // Adapt as per your auth
             issueType,
             title,
             description,
             location: parsedLocation,
+            department,
             status: "Reported",
-            multimediaId: req.multimediaId,
         });
         const mediaDocs = yield Promise.all(files.map((file) => multimedia_model_1.MultimediaModel.create({
             issueID: issue._id,
@@ -66,13 +108,41 @@ const createIssue = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     }
     catch (error) {
         console.error("Error creating issue:", error);
-        res.status(500).json({ message: "Internal server error" });
+        // Log the full error for debugging
+        if (error.name === "ValidationError") {
+            const validationErrors = Object.values(error.errors).map((err) => err.message);
+            res.status(400).json({
+                message: "Validation error",
+                errors: validationErrors
+            });
+            return;
+        }
+        if (error.code === 11000) {
+            res.status(400).json({ message: "Issue with this title already exists" });
+            return;
+        }
+        res.status(500).json({
+            message: "Internal server error",
+            error: process.env.NODE_ENV === "development" ? error.message : undefined
+        });
     }
 });
 exports.createIssue = createIssue;
 const getIssues = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const issues = yield issue_model_1.IssueModel.find({})
+        // If requester is an admin, filter issues by their department
+        let query = {};
+        if (req.role === "admin" && req.adminId) {
+            const admin = yield admin_model_1.AdminModel.findById(req.adminId).lean();
+            if (!admin) {
+                res.status(404).json({ message: "Admin not found" });
+                return;
+            }
+            if (admin.department) {
+                query = { department: admin.department };
+            }
+        }
+        const issues = yield issue_model_1.IssueModel.find(query)
             .populate("citizenId", "fullName")
             .lean();
         const issuesWithMedia = yield Promise.all(issues.map((issue) => __awaiter(void 0, void 0, void 0, function* () {
@@ -84,6 +154,7 @@ const getIssues = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 description: issue.description,
                 type: issue.issueType,
                 location: issue.location, //  send only address
+                department: issue.department,
                 reportedBy: ((_a = issue.citizenId) === null || _a === void 0 ? void 0 : _a.fullName) || "Anonymous",
                 reportedAt: issue.createdAt,
                 image: media.length > 0 ? media[0].url : null,
@@ -100,3 +171,16 @@ const getIssues = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.getIssues = getIssues;
+const getDepartments = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const departments = (0, departments_1.getDepartments)();
+        res.json({ departments });
+    }
+    catch (err) {
+        console.error("Error fetching departments:", err);
+        res.status(500).json({
+            message: "Something went wrong",
+        });
+    }
+});
+exports.getDepartments = getDepartments;

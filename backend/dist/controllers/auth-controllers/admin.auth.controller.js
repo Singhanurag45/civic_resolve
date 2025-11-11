@@ -17,6 +17,8 @@ const admin_model_1 = require("../../models/admin.model");
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const zod_1 = require("zod");
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
+const departments_1 = require("../../utils/departments");
+const department_model_1 = require("../../models/department.model");
 const signupSchema = zod_1.z.object({
     fullName: zod_1.z.string().min(1, { message: "Full name is required" }).trim(),
     password: zod_1.z
@@ -31,7 +33,11 @@ const signupSchema = zod_1.z.object({
         .string()
         .length(10, { message: "Phone number must be exactly 10 digits" })
         .trim(),
-    department: zod_1.z.string().trim(),
+    department: zod_1.z
+        .string()
+        .refine((val) => (0, departments_1.isValidDepartment)(val), {
+        message: `Department must be one of: ${departments_1.VALID_DEPARTMENTS.join(", ")}`,
+    }),
     adminAccessCode: zod_1.z
         .number()
         .int()
@@ -41,6 +47,19 @@ const adminSignup = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     try {
         const parsedData = signupSchema.parse(req.body);
         const { fullName, password, email, phonenumber, department, adminAccessCode, } = parsedData;
+        // Verify department exists and access code matches
+        const departmentDoc = yield department_model_1.DepartmentModel.findOne({ name: department });
+        if (!departmentDoc) {
+            res.status(404).json({ message: "Department not found" });
+            return;
+        }
+        const providedCode = String(adminAccessCode);
+        if (departmentDoc.accessCode !== providedCode) {
+            res
+                .status(403)
+                .json({ message: "Invalid Access Code for the selected department." });
+            return;
+        }
         //Check if the admin already exists
         const existingUser = yield admin_model_1.AdminModel.findOne({ email });
         if (existingUser) {
