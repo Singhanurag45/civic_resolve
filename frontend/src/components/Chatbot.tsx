@@ -6,10 +6,13 @@ type ChatMessage = {
   content: string;
 };
 
-
-// Models compatible with free Gemini API (v1beta)
-const PRIMARY_MODEL = "gemini-2.5-flash";
-const FALLBACK_MODEL = "gemini-2.0-flash";
+// Models to try in order (availability varies by API key/region)
+const GEMINI_MODELS = [
+  "gemini-2.0-flash",
+  "gemini-1.5-flash-8b",
+  "gemini-1.5-flash",
+  "gemini-2.5-flash",
+];
 
 function buildEndpoint(model: string) {
   return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
@@ -21,49 +24,29 @@ async function callGemini(prompt: string): Promise<string> {
     throw new Error("Missing VITE_GEMINI_API_KEY in environment");
   }
 
-  // Try primary model first
-  let resp = await fetch(`${buildEndpoint(PRIMARY_MODEL)}?key=${apiKey}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [
-        {
-          parts: [{ text: prompt }],
-          role: "user",
-        },
-      ],
-    }),
+  const body = JSON.stringify({
+    contents: [{ parts: [{ text: prompt }] }],
   });
+  const opts = {
+    method: "POST" as const,
+    headers: { "Content-Type": "application/json" },
+    body,
+  };
 
-  if (!resp.ok) {
-    // If model not found/unsupported, try fallback
-    const status = resp.status;
-    try {
+  let lastError = "";
+  for (const model of GEMINI_MODELS) {
+    const resp = await fetch(`${buildEndpoint(model)}?key=${apiKey}`, opts);
+    if (resp.ok) {
       const data = await resp.json();
-      const message = data?.error?.message || resp.statusText;
-      if (status === 404 || /not found|not supported/i.test(message)) {
-        resp = await fetch(`${buildEndpoint(FALLBACK_MODEL)}?key=${apiKey}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }], role: "user" }],
-          }),
-        });
-      }
-      if (!resp.ok) {
-        throw new Error(`Gemini error: ${status} ${message}`);
-      }
-    } catch (e: any) {
-      // if parsing failed and not retried, surface original
-      if (!resp.ok) {
-        throw new Error(`Gemini error: ${status} ${resp.statusText}`);
-      }
+      return (data?.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
+    }
+    const errData = await resp.json().catch(() => ({}));
+    lastError = errData?.error?.message || resp.statusText;
+    if (resp.status !== 404 && !/not found|not supported/i.test(lastError)) {
+      break;
     }
   }
-
-  const data = await resp.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-  return text.trim();
+  throw new Error(`Gemini error: ${lastError}`);
 }
 
 const Chatbot: React.FC = () => {
@@ -97,7 +80,7 @@ const Chatbot: React.FC = () => {
     setLoading(true);
     try {
       const reply = await callGemini(
-        `You are a helpful assistant for the Civic Issue Reporter app. Be concise and specific to the app's features. User: ${trimmed}`
+        `You are a helpful assistant for the Civic Issue Reporter app. Be concise and specific to the app's features. User: ${trimmed}`,
       );
       const botMsg: ChatMessage = {
         id: crypto.randomUUID(),
@@ -138,7 +121,9 @@ const Chatbot: React.FC = () => {
       {/* Chat Panel */}
       {open && (
         <div className="fixed bottom-20 right-6 z-50 w-80 max-h-[70vh] bg-white rounded-xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden">
-          <div className="px-4 py-3 border-b bg-gray-50 font-semibold">CivicReport Assistant</div>
+          <div className="px-4 py-3 border-b bg-gray-50 font-semibold">
+            CivicReport Assistant
+          </div>
           <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2">
             {messages.map((m) => (
               <div
@@ -180,5 +165,3 @@ const Chatbot: React.FC = () => {
 };
 
 export default Chatbot;
-
-
