@@ -10,7 +10,14 @@ import {
   CardTitle,
 } from "../components/ui/card";
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
-import { ArrowLeft, MapPin, Upload, Send, LocateFixed } from "lucide-react";
+import {
+  ArrowLeft,
+  MapPin,
+  Upload,
+  Send,
+  LocateFixed,
+  Sparkles,
+} from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import MapComponent from "../components/MapBox";
 import { toast } from "sonner";
@@ -32,6 +39,7 @@ const ReportIssue = () => {
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
   const [flyToCoords, setFlyToCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   const handleInputChange = (field: string, value: string) => {
@@ -57,6 +65,107 @@ const ReportIssue = () => {
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) setSelectedFile(file);
+  };
+
+  const fileToBase64 = (file: File) => {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result;
+        if (typeof result === "string") {
+          const base64 = result.includes(",") ? result.split(",")[1] : result;
+          resolve(base64);
+        } else {
+          reject(new Error("Failed to read file"));
+        }
+      };
+      reader.onerror = () => reject(new Error("Failed to read file"));
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleSuggestDescription = async () => {
+    if (!selectedFile) {
+      toast.error("Please upload an image first");
+      return;
+    }
+
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) {
+      toast.error("AI suggestion is not configured");
+      return;
+    }
+
+    try {
+      setAiLoading(true);
+      const base64Data = await fileToBase64(selectedFile);
+
+      const response = await fetch(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": apiKey,
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    text:
+                      "You are helping a citizen report a civic issue to their local government. " +
+                      "Based ONLY on this image, write a clear, factual, and concise description of the issue. " +
+                      "Do not guess personal details or exact locations. Keep it under 4 sentences.",
+                  },
+                  {
+                    inlineData: {
+                      mimeType: selectedFile.type || "image/jpeg",
+                      data: base64Data,
+                    },
+                  },
+                ],
+              },
+            ],
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        // eslint-disable-next-line no-console
+        console.error("Gemini error:", data);
+        toast.error(data.error?.message || "Failed to get AI suggestion");
+        return;
+      }
+
+      const suggestion =
+        data?.candidates?.[0]?.content?.parts
+          ?.map((part: { text?: string }) => part.text || "")
+          .join(" ")
+          .trim() || "";
+
+      if (!suggestion) {
+        toast.error("AI did not return a usable suggestion");
+        return;
+      }
+
+      setFormData((prev) => ({
+        ...prev,
+        issueDescription: prev.issueDescription
+          ? `${prev.issueDescription}\n\n${suggestion}`
+          : suggestion,
+      }));
+
+      toast.success("AI suggestion added to description");
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error("Error calling Gemini:", error);
+      toast.error("Could not generate AI suggestion");
+    } finally {
+      setAiLoading(false);
+    }
   };
 
   async function reverseGeocode(lat: number, lng: number) {
@@ -374,6 +483,19 @@ const ReportIssue = () => {
                       className="min-h-24 shadow-sm"
                       required
                     />
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleSuggestDescription}
+                        disabled={!selectedFile || aiLoading}
+                        className="mt-2 flex items-center gap-2"
+                      >
+                        <Sparkles className="h-4 w-4 text-blue-600" />
+                        {aiLoading ? "Generating suggestion..." : "Suggest from image (AI)"}
+                      </Button>
+                    </div>
                   </div>
                 </div>
 

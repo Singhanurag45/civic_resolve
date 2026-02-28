@@ -7,9 +7,9 @@ type ChatMessage = {
 };
 
 
-// Use a stable model name compatible with v1beta
-const PRIMARY_MODEL = "gemini-1.5-flash"; // previously used -latest which can 404
-const FALLBACK_MODEL = "gemini-1.0-pro";  // simple text model fallback
+// Models compatible with free Gemini API (v1beta)
+const PRIMARY_MODEL = "gemini-2.5-flash";
+const FALLBACK_MODEL = "gemini-2.0-flash";
 
 function buildEndpoint(model: string) {
   return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
