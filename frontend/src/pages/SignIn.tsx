@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, UserCircle, ShieldCheck } from "lucide-react";
 import civicIssueLogo from "../assets/civic-issue.png";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -12,7 +12,6 @@ import {
 } from "../components/ui/card";
 import {
   Tabs,
-  TabsContent,
   TabsList,
   TabsTrigger,
 } from "../components/ui/tabs";
@@ -37,28 +36,27 @@ const SignIn = () => {
   const { login } = useAuth();
   const { showLoader, hideLoader } = useLoader();
 
-  const handleSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Unified logic for handling both manual and guest sign-ins
+  const performLogin = async (role: "citizen" | "admin", credentials: any) => {
     showLoader();
-
     const minLoaderDuration = new Promise((resolve) =>
-      setTimeout(resolve, 2000)
+      setTimeout(resolve, 1500),
     );
 
     try {
       let result: boolean;
-      if (activeTab === "citizen") {
+      if (role === "citizen") {
         result = await Promise.all([
-          login(citizenForm.email, citizenForm.password, "citizen"),
+          login(credentials.email, credentials.password, "citizen"),
           minLoaderDuration,
         ]).then(([res]) => res);
       } else {
         result = await Promise.all([
           login(
-            adminForm.email,
-            adminForm.password,
+            credentials.email,
+            credentials.password,
             "admin",
-            adminForm.adminAccessCode
+            credentials.adminAccessCode,
           ),
           minLoaderDuration,
         ]).then(([res]) => res);
@@ -67,26 +65,37 @@ const SignIn = () => {
       if (result === true) {
         toast.success("Sign In Successful!", {
           description:
-            activeTab === "citizen"
-              ? "Welcome back!"
-              : "Welcome back, Administrator!",
+            role === "citizen" ? "Welcome back!" : "Welcome back, Admin!",
         });
-        navigate(activeTab === "citizen" ? "/citizen" : "/admin", {
-          replace: true,
-        });
+        navigate(role === "citizen" ? "/citizen" : "/admin", { replace: true });
       } else {
-        toast.error("Sign In Failed!", {
-          description: "Invalid credentials",
-        });
+        toast.error("Sign In Failed!", { description: "Invalid credentials" });
         hideLoader();
       }
     } catch (error) {
       console.error(error);
-      toast.error("Sign In Failed!", {
-        description: "Something went wrong",
-      });
+      toast.error("Sign In Failed!", { description: "Something went wrong" });
       hideLoader();
     }
+  };
+
+  const handleManualSignIn = (e: React.FormEvent) => {
+    e.preventDefault();
+    const credentials = activeTab === "citizen" ? citizenForm : adminForm;
+    performLogin(activeTab, credentials);
+  };
+
+  const handleGuestSignIn = (role: "citizen" | "admin") => {
+    const guestData =
+      role === "citizen"
+        ? { email: "guest@civicresolve.com", password: "Guestpassword@123" }
+        : {
+            email: "guest.admin@mcd.gov",
+            password: "Rohit@123",
+            adminAccessCode: "81267403",
+          };
+
+    performLogin(role, guestData);
   };
 
   return (
@@ -99,11 +108,11 @@ const SignIn = () => {
             <div className="flex items-center justify-center w-16 h-16 rounded-full bg-white shadow">
               <img
                 src={civicIssueLogo}
-                alt="civicIssueLogo"
-                className="w-15 h-15 object-contain"
+                alt="Logo"
+                className="w-12 h-12 object-contain"
               />
             </div>
-            <div>
+            <div className="text-left">
               <h1 className="text-3xl font-extrabold bg-gradient-to-r from-[#016dd0] to-[#159e52] bg-clip-text text-transparent">
                 CivicResolve
               </h1>
@@ -116,10 +125,8 @@ const SignIn = () => {
 
         <Card className="rounded-2xl shadow-2xl bg-white border-0">
           <CardHeader>
-            <CardTitle>
-              <center>Sign In</center>
-            </CardTitle>
-            <CardDescription>
+            <CardTitle className="text-center text-2xl">Sign In</CardTitle>
+            <CardDescription className="text-center">
               Access your account to report issues or manage community reports
             </CardDescription>
           </CardHeader>
@@ -128,7 +135,7 @@ const SignIn = () => {
               value={activeTab}
               onValueChange={(val) => setActiveTab(val as any)}
             >
-              <TabsList className="grid w-full grid-cols-2 rounded-full bg-gray-100 p-1">
+              <TabsList className="grid w-full grid-cols-2 rounded-full bg-gray-100 p-1 mb-6">
                 <TabsTrigger
                   value="citizen"
                   className="rounded-full data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#016dd0] data-[state=active]:to-[#159e52] data-[state=active]:text-white"
@@ -144,133 +151,82 @@ const SignIn = () => {
               </TabsList>
 
               <AnimatePresence mode="wait">
-                {activeTab === "citizen" && (
-                  <TabsContent value="citizen" forceMount>
-                    <motion.div
-                      key="citizen"
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -20 }}
-                      transition={{ duration: 0.3 }}
-                      className="mt-6"
-                    >
-                      <form onSubmit={handleSignIn} className="space-y-4">
-                        <div>
-                          <Label htmlFor="citizen-email">Email</Label>
-                          <Input
-                            id="citizen-email"
-                            type="email"
-                            value={citizenForm.email}
-                            onChange={(e) =>
-                              setCitizenForm({
-                                ...citizenForm,
-                                email: e.target.value,
-                              })
-                            }
-                            required
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="citizen-password">Password</Label>
-                          <div className="relative">
-                            <Input
-                              id="citizen-password"
-                              type={showPassword ? "text" : "password"}
-                              value={citizenForm.password}
-                              onChange={(e) =>
-                                setCitizenForm({
+                <motion.div
+                  key={activeTab}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <form onSubmit={handleManualSignIn} className="space-y-4">
+                    {/* Form Fields based on activeTab */}
+                    <div className="space-y-4">
+                      <div>
+                        <Label>Email</Label>
+                        <Input
+                          type="email"
+                          placeholder="name@example.com"
+                          value={
+                            activeTab === "citizen"
+                              ? citizenForm.email
+                              : adminForm.email
+                          }
+                          onChange={(e) =>
+                            activeTab === "citizen"
+                              ? setCitizenForm({
                                   ...citizenForm,
-                                  password: e.target.value,
+                                  email: e.target.value,
                                 })
-                              }
-                              required
-                            />
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="absolute right-0 top-0 h-full px-3 py-2"
-                              onClick={() => setShowPassword(!showPassword)}
-                            >
-                              {showPassword ? (
-                                <EyeOff className="h-4 w-4" />
-                              ) : (
-                                <Eye className="h-4 w-4" />
-                              )}
-                            </Button>
-                          </div>
-                        </div>
-                        <Button
-                          type="submit"
-                          className="w-full bg-gradient-to-r from-[#016dd0] to-[#159e52] text-white hover:opacity-70"
-                        >
-                          Sign In as Citizen
-                        </Button>
-                      </form>
-                    </motion.div>
-                  </TabsContent>
-                )}
-
-                {activeTab === "admin" && (
-                  <TabsContent value="admin" forceMount>
-                    <motion.div
-                      key="admin"
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -20 }}
-                      transition={{ duration: 0.3 }}
-                      className="mt-6"
-                    >
-                      <form onSubmit={handleSignIn} className="space-y-4">
-                        <div>
-                          <Label htmlFor="admin-email">Email</Label>
+                              : setAdminForm({
+                                  ...adminForm,
+                                  email: e.target.value,
+                                })
+                          }
+                          required
+                        />
+                      </div>
+                      <div>
+                        <Label>Password</Label>
+                        <div className="relative">
                           <Input
-                            id="admin-email"
-                            type="email"
-                            value={adminForm.email}
+                            type={showPassword ? "text" : "password"}
+                            value={
+                              activeTab === "citizen"
+                                ? citizenForm.password
+                                : adminForm.password
+                            }
                             onChange={(e) =>
-                              setAdminForm({
-                                ...adminForm,
-                                email: e.target.value,
-                              })
+                              activeTab === "citizen"
+                                ? setCitizenForm({
+                                    ...citizenForm,
+                                    password: e.target.value,
+                                  })
+                                : setAdminForm({
+                                    ...adminForm,
+                                    password: e.target.value,
+                                  })
                             }
                             required
                           />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="absolute right-0 top-0 h-full px-3"
+                            onClick={() => setShowPassword(!showPassword)}
+                          >
+                            {showPassword ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </Button>
                         </div>
-                        <div>
-                          <Label htmlFor="admin-password">Password</Label>
-                          <div className="relative">
-                            <Input
-                              id="admin-password"
-                              type={showPassword ? "text" : "password"}
-                              value={adminForm.password}
-                              onChange={(e) =>
-                                setAdminForm({
-                                  ...adminForm,
-                                  password: e.target.value,
-                                })
-                              }
-                              required
-                            />
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="absolute right-0 top-0 h-full px-3 py-2"
-                              onClick={() => setShowPassword(!showPassword)}
-                            >
-                              {showPassword ? (
-                                <EyeOff className="h-4 w-4" />
-                              ) : (
-                                <Eye className="h-4 w-4" />
-                              )}
-                            </Button>
-                          </div>
-                        </div>
-                        <div>
-                          <Label htmlFor="admin-code">Admin Code</Label>
+                      </div>
+                      {activeTab === "admin" && (
+                        <div className="animate-in fade-in slide-in-from-top-2">
+                          <Label>Admin Access Code</Label>
                           <Input
-                            id="admin-code"
                             value={adminForm.adminAccessCode}
                             onChange={(e) =>
                               setAdminForm({
@@ -278,31 +234,64 @@ const SignIn = () => {
                                 adminAccessCode: e.target.value,
                               })
                             }
+                            placeholder="Enter security code"
                             required
                           />
                         </div>
-                        <Button
-                          type="submit"
-                          className="w-full bg-gradient-to-r from-[#016dd0] to-[#159e52] text-white hover:opacity-70"
-                        >
-                          Sign In as Administrator
-                        </Button>
-                      </form>
-                    </motion.div>
-                  </TabsContent>
-                )}
+                      )}
+                    </div>
+
+                    <Button
+                      type="submit"
+                      className="w-full bg-gradient-to-r from-[#016dd0] to-[#159e52] text-white hover:opacity-90 transition-opacity"
+                    >
+                      Sign In as{" "}
+                      {activeTab === "citizen" ? "Citizen" : "Administrator"}
+                    </Button>
+
+                    {/* Guest Section */}
+                    <div className="relative my-6">
+                      <div className="absolute inset-0 flex items-center">
+                        <span className="w-full border-t" />
+                      </div>
+                      <div className="relative flex justify-center text-xs uppercase">
+                        <span className="bg-white px-2 text-muted-foreground">
+                          Demo Access
+                        </span>
+                      </div>
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full border-dashed border-2 hover:bg-slate-50 flex items-center gap-2"
+                      onClick={() => handleGuestSignIn(activeTab)}
+                    >
+                      {activeTab === "citizen" ? (
+                        <UserCircle className="h-4 w-4" />
+                      ) : (
+                        <ShieldCheck className="h-4 w-4" />
+                      )}
+                      Try Guest {activeTab === "citizen" ? "Citizen" : "Admin"}{" "}
+                      Mode
+                    </Button>
+                  </form>
+                </motion.div>
               </AnimatePresence>
 
-              <div className="mt-6 text-center">
+              <div className="mt-8 space-y-3 text-center">
                 <p className="text-sm text-muted-foreground">
-                  Don{"'"}t have an account?{" "}
-                  <Link to="/signup" className="text-primary hover:underline">
+                  Don't have an account?{" "}
+                  <Link
+                    to="/signup"
+                    className="text-[#016dd0] font-semibold hover:underline"
+                  >
                     Sign up here
                   </Link>
                 </p>
                 <Link
                   to="/"
-                  className="text-sm text-muted-foreground hover:text-primary"
+                  className="block text-sm text-muted-foreground hover:text-primary transition-colors"
                 >
                   ← Back to Home
                 </Link>
