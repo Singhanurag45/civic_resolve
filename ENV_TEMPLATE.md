@@ -19,6 +19,12 @@ CLOUDINARY_API_SECRET=your-api-secret-here
 # Server Configuration
 PORT=10000
 NODE_ENV=production
+
+# Brevo OTP Email Configuration
+BREVO_API_KEY=your-brevo-api-key
+BREVO_SENDER_EMAIL=no-reply@yourdomain.com
+BREVO_SENDER_NAME=CivicResolve
+CITIZEN_SIGNUP_OTP_EXPIRY_MINUTES=10
 ```
 
 ## Frontend Environment Variables (Vercel)

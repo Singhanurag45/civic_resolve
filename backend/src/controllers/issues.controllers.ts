@@ -4,6 +4,8 @@ import { CounterModel } from "../models/counter.model";
 import { MultimediaModel } from "../models/multimedia.model";
 import { isValidDepartment, getDepartments as getDepts } from "../utils/departments";
 import { AdminModel } from "../models/admin.model";
+import { CitizenModel } from "../models/citizen.model";
+import { sendIssueSubmissionSuccessEmail } from "../utils/brevo";
 
 export const createIssue = async (
   req: Request,
@@ -102,6 +104,8 @@ export const createIssue = async (
       status: "Reported",
     });
 
+    const citizen = await CitizenModel.findById((req as any).citizenId).lean();
+
     const mediaDocs = await Promise.all(
       files.map((file) =>
         MultimediaModel.create({
@@ -116,6 +120,22 @@ export const createIssue = async (
       message: "Issue created",
       media: mediaDocs,
     });
+
+    if (citizen?.email && citizen?.fullName) {
+      try {
+        await sendIssueSubmissionSuccessEmail({
+          recipientEmail: citizen.email,
+          recipientName: citizen.fullName,
+          issueId: String(issue.customIssueId),
+          title: String(issue.title),
+          department: String(issue.department),
+          status: String(issue.status),
+          address: issue.location?.address,
+        });
+      } catch (emailError) {
+        console.error("Failed to send issue submission email:", emailError);
+      }
+    }
 
     res.status(200).json({ message: "Issue created", issue, media: mediaDocs });
   } catch (error: any) {

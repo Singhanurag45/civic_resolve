@@ -28,6 +28,9 @@ import { DEPARTMENTS } from "../constants/departments";
 const SignUp = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [citizenOtp, setCitizenOtp] = useState("");
+  const [isCitizenOtpSent, setIsCitizenOtpSent] = useState(false);
+  const [isCitizenSubmitting, setIsCitizenSubmitting] = useState(false);
   const [citizenForm, setCitizenForm] = useState({
     fullName: "",
     email: "",
@@ -62,38 +65,50 @@ const SignUp = () => {
     return regex.test(password);
   };
 
-  // Citizen signup handler
-  const handleCitizenSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setCitizenErrors({});
+  const validateCitizenForm = () => {
+    if (!citizenForm.fullName.trim() || !citizenForm.email.trim()) {
+      toast.error("Please fill all required fields.");
+      return false;
+    }
 
     if (!validatePassword(citizenForm.password)) {
       toast.error(
         "Password must be at least 8 characters, include uppercase, lowercase, number and special character."
       );
-      return;
+      return false;
     }
     if (citizenForm.password !== citizenForm.confirmPassword) {
       toast.error("Passwords do not match.");
-      return;
+      return false;
     }
     if (!citizenForm.agreeToTerms) {
       toast.error("Please agree to the terms and conditions.");
-      return;
+      return false;
     }
     if (
       citizenForm.phonenumber.trim().length !== 10 ||
       !/^\d{10}$/.test(citizenForm.phonenumber.trim())
     ) {
       toast.error("Phone number must be exactly 10 digits.");
+      return false;
+    }
+
+    return true;
+  };
+
+  // Citizen signup handler
+  const handleCitizenSignUp = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    setCitizenErrors({});
+
+    if (!validateCitizenForm()) {
       return;
     }
 
     try {
-      console.log("url: ", import.meta.env.VITE_API_BASE_URL);
-      
+      setIsCitizenSubmitting(true);
       const response = await fetch(
-        `${import.meta.env.VITE_API_BASE_URL}/api/v1/citizen/signup`,
+        `${import.meta.env.VITE_API_BASE_URL}/api/v1/citizen/signup/request-otp`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -106,14 +121,11 @@ const SignUp = () => {
         }
       );
 
-      // Check if response is ok before parsing
       if (!response.ok) {
-        // Try to parse error response
         let errorData;
         try {
           errorData = await response.json();
-        } catch (parseError) {
-          // If JSON parsing fails, use status text
+        } catch {
           toast.error(`Server error: ${response.status} ${response.statusText}`);
           return;
         }
@@ -133,21 +145,81 @@ const SignUp = () => {
         return;
       }
 
-      // Success case
-      await response.json();
-      toast.success("Registration Successful! You can now sign in.");
-      navigate("/signin");
+      const result = await response.json();
+      setCitizenOtp("");
+      setIsCitizenOtpSent(true);
+      toast.success(
+        result.message || "OTP sent successfully. Check your email inbox."
+      );
     } catch (error: any) {
-      // Handle network errors, CORS errors, etc.
       if (error.name === "TypeError" && error.message.includes("fetch")) {
-        toast.error("Cannot connect to server. Please check if the backend is running on http://localhost:5000");
+        toast.error(
+          "Cannot connect to server. Please check if the backend is running."
+        );
       } else if (error.message?.includes("CORS")) {
         toast.error("CORS error: Please check backend CORS configuration.");
       } else {
         toast.error("Something went wrong! Please try again.");
       }
       console.error("Signup error:", error);
+    } finally {
+      setIsCitizenSubmitting(false);
     }
+  };
+
+  const handleCitizenOtpVerification = async () => {
+    setCitizenErrors({});
+
+    if (!isCitizenOtpSent) {
+      toast.error("Please request an OTP first.");
+      return;
+    }
+
+    if (!/^\d{6}$/.test(citizenOtp.trim())) {
+      toast.error("Enter the 6-digit OTP sent to your email.");
+      return;
+    }
+
+    try {
+      setIsCitizenSubmitting(true);
+      const response = await fetch(
+        `${import.meta.env.VITE_API_BASE_URL}/api/v1/citizen/signup/verify-otp`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: citizenForm.email,
+            otp: citizenOtp.trim(),
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        toast.error(result.message || "OTP verification failed.");
+        return;
+      }
+
+      toast.success("Registration successful! You can now sign in.");
+      navigate("/signin");
+    } catch (error: any) {
+      if (error.name === "TypeError" && error.message.includes("fetch")) {
+        toast.error(
+          "Cannot connect to server. Please check if the backend is running."
+        );
+      } else {
+        toast.error("Something went wrong! Please try again.");
+      }
+      console.error("OTP verification error:", error);
+    } finally {
+      setIsCitizenSubmitting(false);
+    }
+  };
+
+  const resetCitizenOtpFlow = () => {
+    setCitizenOtp("");
+    setIsCitizenOtpSent(false);
   };
 
   // Admin signup handler
@@ -325,6 +397,7 @@ const SignUp = () => {
                             id="citizen-fullName"
                             placeholder="John Doe"
                             value={citizenForm.fullName}
+                            disabled={isCitizenOtpSent}
                             onChange={(e) =>
                               setCitizenForm({
                                 ...citizenForm,
@@ -346,6 +419,7 @@ const SignUp = () => {
                             type="email"
                             placeholder="citizen@example.com"
                             value={citizenForm.email}
+                            disabled={isCitizenOtpSent}
                             onChange={(e) =>
                               setCitizenForm({
                                 ...citizenForm,
@@ -367,6 +441,7 @@ const SignUp = () => {
                             type="tel"
                             placeholder="0123456789"
                             value={citizenForm.phonenumber}
+                            disabled={isCitizenOtpSent}
                             onChange={(e) =>
                               setCitizenForm({
                                 ...citizenForm,
@@ -389,6 +464,7 @@ const SignUp = () => {
                               type={showPassword ? "text" : "password"}
                               placeholder="Create a strong password"
                               value={citizenForm.password}
+                              disabled={isCitizenOtpSent}
                               onChange={(e) =>
                                 setCitizenForm({
                                   ...citizenForm,
@@ -427,6 +503,7 @@ const SignUp = () => {
                               type={showConfirmPassword ? "text" : "password"}
                               placeholder="Confirm your password"
                               value={citizenForm.confirmPassword}
+                              disabled={isCitizenOtpSent}
                               onChange={(e) =>
                                 setCitizenForm({
                                   ...citizenForm,
@@ -456,6 +533,7 @@ const SignUp = () => {
                           <Checkbox
                             id="citizen-terms"
                             checked={citizenForm.agreeToTerms}
+                            disabled={isCitizenOtpSent}
                             onCheckedChange={(checked) =>
                               setCitizenForm({
                                 ...citizenForm,
@@ -478,12 +556,68 @@ const SignUp = () => {
                             </p>
                           )}
                         </div>
-                        <Button
-                          type="submit"
-                          className="w-full bg-gradient-to-r from-[#016dd0] to-[#159e52] text-white font-bold shadow-md hover:opacity-70 transition"
-                        >
-                          Create Citizen Account
-                        </Button>
+                        {isCitizenOtpSent && (
+                          <div className="space-y-2 rounded-xl border border-emerald-200 bg-emerald-50/70 p-4">
+                            <Label htmlFor="citizen-otp">Email OTP</Label>
+                            <Input
+                              id="citizen-otp"
+                              inputMode="numeric"
+                              maxLength={6}
+                              placeholder="Enter 6-digit OTP"
+                              value={citizenOtp}
+                              onChange={(e) =>
+                                setCitizenOtp(
+                                  e.target.value.replace(/\D/g, "").slice(0, 6)
+                                )
+                              }
+                            />
+                            <p className="text-sm text-muted-foreground">
+                              We sent a verification code to {citizenForm.email}.
+                            </p>
+                          </div>
+                        )}
+                        {!isCitizenOtpSent ? (
+                          <Button
+                            type="submit"
+                            disabled={isCitizenSubmitting}
+                            className="w-full bg-gradient-to-r from-[#016dd0] to-[#159e52] text-white font-bold shadow-md hover:opacity-70 transition"
+                          >
+                            {isCitizenSubmitting
+                              ? "Sending OTP..."
+                              : "Send Signup OTP"}
+                          </Button>
+                        ) : (
+                          <div className="space-y-3">
+                            <Button
+                              type="button"
+                              disabled={isCitizenSubmitting}
+                              onClick={handleCitizenOtpVerification}
+                              className="w-full bg-gradient-to-r from-[#016dd0] to-[#159e52] text-white font-bold shadow-md hover:opacity-70 transition"
+                            >
+                              {isCitizenSubmitting
+                                ? "Verifying OTP..."
+                                : "Verify OTP & Create Account"}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              disabled={isCitizenSubmitting}
+                              onClick={handleCitizenSignUp}
+                              className="w-full"
+                            >
+                              Resend OTP
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              disabled={isCitizenSubmitting}
+                              onClick={resetCitizenOtpFlow}
+                              className="w-full"
+                            >
+                              Edit Details
+                            </Button>
+                          </div>
+                        )}
                       </form>
                     </motion.div>
                   )}

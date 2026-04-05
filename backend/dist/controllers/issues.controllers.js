@@ -15,7 +15,10 @@ const counter_model_1 = require("../models/counter.model");
 const multimedia_model_1 = require("../models/multimedia.model");
 const departments_1 = require("../utils/departments");
 const admin_model_1 = require("../models/admin.model");
+const citizen_model_1 = require("../models/citizen.model");
+const brevo_1 = require("../utils/brevo");
 const createIssue = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
     try {
         const files = req.files || [];
         const { title = "Untitled", description, location, issueType, department } = req.body;
@@ -34,7 +37,7 @@ const createIssue = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             try {
                 parsedLocation = JSON.parse(location);
             }
-            catch (_a) {
+            catch (_b) {
                 res.status(400).json({ message: "Invalid location JSON format" });
                 return;
             }
@@ -94,6 +97,7 @@ const createIssue = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             department,
             status: "Reported",
         });
+        const citizen = yield citizen_model_1.CitizenModel.findById(req.citizenId).lean();
         const mediaDocs = yield Promise.all(files.map((file) => multimedia_model_1.MultimediaModel.create({
             issueID: issue._id,
             fileType: file.mimetype.startsWith("video") ? "video" : "image",
@@ -104,6 +108,22 @@ const createIssue = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             message: "Issue created",
             media: mediaDocs,
         });
+        if ((citizen === null || citizen === void 0 ? void 0 : citizen.email) && (citizen === null || citizen === void 0 ? void 0 : citizen.fullName)) {
+            try {
+                yield (0, brevo_1.sendIssueSubmissionSuccessEmail)({
+                    recipientEmail: citizen.email,
+                    recipientName: citizen.fullName,
+                    issueId: String(issue.customIssueId),
+                    title: String(issue.title),
+                    department: String(issue.department),
+                    status: String(issue.status),
+                    address: (_a = issue.location) === null || _a === void 0 ? void 0 : _a.address,
+                });
+            }
+            catch (emailError) {
+                console.error("Failed to send issue submission email:", emailError);
+            }
+        }
         res.status(200).json({ message: "Issue created", issue, media: mediaDocs });
     }
     catch (error) {

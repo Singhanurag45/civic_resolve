@@ -2,6 +2,8 @@ import { Router } from "express";
 import {
   citizenSignin,
   citizenSignup,
+  requestCitizenSignupOtp,
+  verifyCitizenSignupOtp,
 } from "../controllers/auth-controllers/citizen.auth.controller";
 import { authMiddleware } from "../middlerware/auth.middleware";
 import {
@@ -14,6 +16,8 @@ import {
 const router = Router();
 
 router.post("/citizen/signup", citizenSignup);
+router.post("/citizen/signup/request-otp", requestCitizenSignupOtp);
+router.post("/citizen/signup/verify-otp", verifyCitizenSignupOtp);
 
 router.post("/citizen/signin", citizenSignin);
 

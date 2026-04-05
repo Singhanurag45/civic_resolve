@@ -6,6 +6,8 @@ const auth_middleware_1 = require("../middlerware/auth.middleware");
 const citizen_controller_1 = require("../controllers/citizen.controller");
 const router = (0, express_1.Router)();
 router.post("/citizen/signup", citizen_auth_controller_1.citizenSignup);
+router.post("/citizen/signup/request-otp", citizen_auth_controller_1.requestCitizenSignupOtp);
+router.post("/citizen/signup/verify-otp", citizen_auth_controller_1.verifyCitizenSignupOtp);
 router.post("/citizen/signin", citizen_auth_controller_1.citizenSignin);
 router.get("/citizen/profile/", auth_middleware_1.authMiddleware, citizen_controller_1.getCitizenProfile);
 router.put("/citizen/:id", auth_middleware_1.authMiddleware, citizen_controller_1.updateCitizenProfile);
