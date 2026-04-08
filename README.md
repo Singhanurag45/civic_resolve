@@ -2,6 +2,10 @@
 
 CivicResolve is a full-stack civic issue reporting platform built with React, Vite, Express, TypeScript, and MongoDB. Citizens can sign up with email OTP verification, report issues with location and media, and follow issue progress. Department admins can sign in, review issues assigned to their department, update statuses, and manage records from a dashboard.
 
+## Performance Snapshot
+
+![Website Performance Screenshot](./Screenshots/WebsitePerformance.png)
+
 ## What the Project Includes
 
 ### Citizen flow
